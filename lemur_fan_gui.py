@@ -167,7 +167,43 @@ class Controller:
         self.process = None
 
 
-def run_gui(demo=False, smoke_test=None):
+class WindowLifecycle:
+    """Separate hiding the window from explicitly ending the controller."""
+
+    def close(self, *_):
+        if self.closing:
+            return True
+        if self.tray is not None and self.tray.available:
+            self.hide()
+        else:
+            # Never leave a running controller behind an unreachable window.
+            self.iconify()
+            self.note.set_text('System tray unavailable. Minimized to the taskbar; fan control continues. Use Quit to exit.')
+        return True
+
+    def reveal(self, *_):
+        self.deiconify()
+        self.show()
+        self.present()
+
+    def tray_unavailable(self):
+        if not self.closing and not self.get_visible():
+            self.reveal()
+            self.note.set_text('System tray disconnected. Fan control continues; the window has been reopened.')
+
+    def request_quit(self, *_):
+        if self.closing:
+            return True
+        self.closing = True
+        self.sensor_stop.set()
+        if self.controller.process is not None:
+            self.stop()
+        else:
+            self.finish_close()
+        return True
+
+
+def run_gui(demo=False, smoke_test=None, test_driver=None):
     try:
         import gi
         gi.require_version('Gtk', '3.0')
@@ -183,7 +219,7 @@ def run_gui(demo=False, smoke_test=None):
         print('No graphical display is available. Run from your desktop terminal.', file=sys.stderr)
         return 1
 
-    class Window(Gtk.Window):
+    class Window(WindowLifecycle, Gtk.Window):
         def __init__(self):
             super().__init__(title='Lemur Fan Control')
             self.set_default_size(960, 900)
@@ -193,6 +229,7 @@ def run_gui(demo=False, smoke_test=None):
             self.controller = Controller(self.events)
             self.sensor_stop = threading.Event()
             self.closing = False
+            self.tray = None
             self.smoke_failed = False
             self.latest = None
             self.target = None
@@ -200,13 +237,18 @@ def run_gui(demo=False, smoke_test=None):
             self.log_lines = deque(maxlen=300)
             self.editable = []
             self.build()
+            try:
+                from lemur_fan_control.tray import SystemTray
+                self.tray = SystemTray(self.reveal, self.stop, self.request_quit, self.tray_unavailable)
+            except (GLib.Error, ImportError, RuntimeError) as exc:
+                self.add_log(f'System tray unavailable: {exc}')
             self.show_all()
             self.update_mode()
             self.set_busy(False)
             if demo:
                 self.state.set_text('DEMO · no hardware access')
                 self.on_sample(dict(temperature_c=56.0, rpm=2480, duty_percent=25.9))
-                self.note.set_text('Demo preview. Close this window and launch normally to use live sensors.')
+                self.note.set_text('Demo preview. Close hides to the tray; use Quit to exit.')
                 self.start_button.set_sensitive(False)
                 self.preview_button.set_sensitive(False)
                 self.auto_button.set_sensitive(False)
@@ -361,8 +403,12 @@ def run_gui(demo=False, smoke_test=None):
             self.setup_button.set_tooltip_text('Authorize once to install password-free fan control for this desktop account')
             self.setup_button.connect('clicked', lambda *_: self.setup())
             setup_row.pack_end(self.setup_button, False, False, 0)
+            self.quit_button = Gtk.Button(label='Quit')
+            self.quit_button.set_tooltip_text('Exit the application and restore firmware automatic cooling')
+            self.quit_button.connect('clicked', self.request_quit)
+            setup_row.pack_end(self.quit_button, False, False, 0)
             root.pack_start(setup_row, False, False, 0)
-            self.note = self.label('Monitoring only. Start runs continuously; stopping or closing returns control to firmware.',
+            self.note = self.label('Monitoring only. Close hides to the tray; Stop & restore or Quit ends control.',
                                    'subtitle')
             self.note.set_line_wrap(True)
             self.note.set_max_width_chars(105)
@@ -508,9 +554,9 @@ def run_gui(demo=False, smoke_test=None):
                                 'Starting installed helper…' if self.controller.passwordless else
                                 'Awaiting authorization…')
             self.note.set_text('Dry run uses live sensors and makes no fan changes.' if preview else
-                               'Starting continuous control. Keep this window open while running.'
+                               'Starting continuous control. Close hides to the tray; use Quit to exit.'
                                if self.controller.passwordless else
-                               'Authorize the fan controller in the system password dialog. Keep this window open while running.')
+                               'Authorize the fan controller in the system password dialog. Close hides to the tray; use Quit to exit.')
             self.add_log('$ lemur_fan.py ' + ' '.join(argv))
 
         def setup(self):
@@ -555,7 +601,7 @@ def run_gui(demo=False, smoke_test=None):
                 self.values['target'].set_text(f'{self.target}%')
                 self.state.set_text('Dry run · no fan changes' if self.controller.preview else 'Continuous control running')
                 self.note.set_text('Previewing requested duty with live sensors.' if self.controller.preview else
-                                   'Continuous control is active. Stop or close this window to restore firmware automatic cooling.')
+                                   'Continuous control is active. Close hides to the tray; Stop & restore or Quit returns control to firmware.')
             if line in ('Firmware automatic cooling restored.',
                         'Firmware automatic cooling is already active; no mode change needed.'):
                 self.controller.restored = True
@@ -597,6 +643,8 @@ def run_gui(demo=False, smoke_test=None):
                     self.note.set_text('Authorization was cancelled or unavailable. Use One-time setup, and run fan control from your active local desktop session.')
                 elif preview:
                     self.note.set_text('Dry run failed. Review Controller output for details.')
+                if not self.closing:
+                    self.reveal()
             if self.closing:
                 self.finish_close()
 
@@ -619,19 +667,17 @@ def run_gui(demo=False, smoke_test=None):
                     self.on_line(value)
                 elif kind == 'exit':
                     self.on_exit(value)
+            if self.tray is not None:
+                self.tray.update(self.state.get_text(),
+                                 can_stop=(self.controller.process is not None and
+                                           self.controller.command != 'setup' and not self.controller.stopping),
+                                 preview=self.controller.preview, quitting=self.closing)
             return not self.closing or self.controller.process is not None
-
-        def close(self, *_):
-            self.closing = True
-            self.sensor_stop.set()
-            if self.controller.process is not None:
-                self.stop()
-                return True
-            self.finish_close()
-            return True
 
         def finish_close(self):
             self.sensor_stop.set()
+            if self.tray is not None:
+                self.tray.close()
             self.destroy()
             Gtk.main_quit()
 
@@ -686,21 +732,29 @@ def run_gui(demo=False, smoke_test=None):
         def fail_smoke(self, exc):
             self.smoke_failed = True
             print(f'UI verification failed: {exc}', file=sys.stderr)
-            self.close()
+            self.request_quit()
 
         def save_capture(self, path):
             window = self.get_window()
             pixbuf = Gdk.pixbuf_get_from_window(window, 0, 0, self.get_allocated_width(),
                                                self.get_allocated_height())
             pixbuf.savev(path, 'png', [], [])
-            self.close()
+            self.request_quit()
             return False
 
     window = Window()
+    if test_driver is not None:
+        def drive_test():
+            try:
+                test_driver(window)
+            except Exception as exc:
+                window.fail_smoke(exc)
+            return False
+        GLib.idle_add(drive_test)
 
     def quit_signal(*_):
         def close_once():
-            window.close()
+            window.request_quit()
             return False
         GLib.idle_add(close_once)
 

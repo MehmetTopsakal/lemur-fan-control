@@ -38,11 +38,20 @@ Using the window
   fan's reported PWM signal. Neither value is a percentage of maximum RPM.
 * The graph's orange dot marks the instantaneous profile target at the
   measured temperature, before the controller's delayed speed reductions.
+* The window's close button hides it to the system tray. Fan control and
+  sensor monitoring continue. Click the tray icon or choose Show window in
+  its menu to reopen the GUI.
 * Stop & restore ends control and waits for automatic-cooling restoration.
-  Closing the window does the same. Keep it open during continuous control.
+  The application remains open. Choose Quit & restore from the tray menu or
+  use the GUI's Quit button to restore automatic cooling and exit.
 * Firmware automatic explicitly returns control to firmware when no GUI
   operation is running. Diagnostics reads the EC identity and supported mode.
   Results and errors appear in Controller output.
+
+The system tray uses the desktop's StatusNotifierItem service through Gio;
+no additional AppIndicator bindings are required. If no tray host is
+available, Close minimizes to the taskbar. A disconnected tray or controller
+error reopens the window so it remains accessible.
 
 Default profile
 ---------------

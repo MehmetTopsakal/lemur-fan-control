@@ -2,8 +2,8 @@
 
 A GTK 3 desktop app and supervised command-line fan controller for **Linux on
 the System76 Lemur Pro lemp13**. It provides live temperature/RPM/PWM readings,
-an editable continuous temperature curve, fixed duty, dry-run previews, and
-automatic-cooling restoration on stop or window closure.
+an editable continuous temperature curve, fixed duty, dry-run previews,
+close-to-tray operation, and automatic-cooling restoration on Stop or Quit.
 
 ## Install with Pixi
 
@@ -89,8 +89,27 @@ commands; Python and arbitrary shell commands receive no password-free grant.
 
 Before this setup, monitoring and dry run work without root; actual control
 requests administrator authorization. Stop a controller you already have
-running before starting a new one. Closing a controlling GUI waits for its
-existing CLI supervisor to finish restoring firmware automatic cooling.
+running before starting a new one.
+
+## System tray
+
+Clicking the window's close button hides it to the system tray. Fan control,
+sensor monitoring, and the controller heartbeat continue while the window is
+hidden. Click the tray icon or choose **Show window** from its menu to reopen
+the GUI. The tray tooltip shows the controller's current status.
+
+Use **Stop & restore** to end fan control while leaving the application open.
+Choose **Quit & restore** from the tray menu, or the GUI's **Quit** button,
+to exit and wait for automatic-cooling restoration. Ctrl+C and SIGTERM also
+exit through this cleanup path.
+
+Tray support uses the desktop's StatusNotifierItem service through the
+existing GTK/Gio runtime, without additional Python or AppIndicator packages.
+If the desktop has no tray host, Close minimizes to the taskbar so the window
+remains accessible. If the tray disappears while the window is hidden, the
+application reopens it. Controller errors also reopen the window.
+
+## Update or remove administrator setup
 
 To remove password-free access, stop fan control and run:
 
