@@ -1,0 +1,3 @@
+include README.md README-GUI.txt
+include launch_gui.sh lemur-fan-control.desktop
+include test_*.py

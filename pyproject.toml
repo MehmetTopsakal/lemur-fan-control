@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lemur-fan-control"
+version = "0.1.0"
+description = "GTK GUI and supervised fan controller for the System76 Lemur Pro lemp13"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: X11 Applications :: GTK",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: System :: Hardware",
+]
+
+[project.scripts]
+lemur-fan = "lemur_fan:main"
+lemur-fan-gui = "lemur_fan_control.launcher:gui_main"
+lemur-fan-setup = "lemur_fan_control.launcher:setup_main"
+
+[tool.setuptools]
+packages = ["lemur_fan_control"]
+py-modules = [
+  "lemur_fan",
+  "lemur_fan_gui",
+  "lemur_fan_backend",
+  "lemur_fan_privileged",
+  "setup_passwordless",
+]

@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Name=Lemur Fan Control
+Comment=Monitor and control the System76 Lemur Pro fan
+Exec=/home/mt/software/lemur-fan-control/launch_gui.sh
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=true
